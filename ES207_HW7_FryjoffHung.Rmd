@@ -1,0 +1,156 @@
+---
+title: "ES207 HW7 Anna Fryjoff-Hung"
+output: html_notebook
+---
+
+
+#Using the Bay Delta WQ dataset:
+
+##1. For the Water Years 2005-2012, develop a predictive model of the mean monthly Chl-a concentration in the California Bay Delta using other mean monthly water quality variables.
+
+•	Be sure to show your work, including multiple model comparison (or step models), provide quantification and explain the reasoning behind your final model selection.
+•	Which variables are highly correlated with the others? How did you account for this?
+•	Be sure to demonstrate that you have accounted for all assumptions in your regression. Identify any badly fitted observations, discuss whether your residuals are following expected patterns, and discuss whether there are any possible explanations for any poorly modeled observations.
+•	Quantify how much variance in mean monthly Chl-a is explained by the variables you selected. 
+
+```{r}
+require(tidyverse)
+require(readr)
+library(data.table)
+library(lubridate)
+require(readxl)
+require(broom)
+require(car)
+```
+
+```{r}
+#Read in data
+wq <- read_csv("/Users/Anna/Box Sync/Spring 2018/ES207/HW/HW7/Data/BayDeltaWQ.csv", col_names = TRUE, na = c("NA", "n/p"), guess_max = 30000)
+```
+```{r}
+#Add month and year columns to dataset and group by year/month
+
+wq.grouped <- as.tibble(wq) %>% 
+  mutate(year = format(SampleDate, "%Y"), month = format(SampleDate, "%m")) %>% 
+  group_by(year, month) %>% 
+  filter(year>=2004)
+wq.grouped$Depth <- as.double(wq.grouped$Depth)
+
+wq.summary <- summarise_all(wq.grouped, mean, na.rm = TRUE)
+
+#Add Water Year to dataset
+wq.summary$year <- as.numeric(wq.summary$year)
+wq.summary$month <- as.numeric(wq.summary$month)
+wq.summary$WY <- ifelse(wq.summary$month>=10, wq.summary$year+1, wq.summary$year)
+
+wq.wy <- subset(wq.summary, wq.summary$WY >= 2005 & wq.summary$WY <= 2012)
+
+```
+```{r}
+#Stepwise Multiple Regression - pick best predictor variables from full model, choosing variables that are not all NA/make sense (avg lat/long not helpful)
+
+lms <- step(lm(`Chlorophyll a` ~ month + Depth + `Conductance (EC)`+ SiteDepth+ Fluorescence + Oxygen + `Secchi Depth` + Temperature + Turbidity + `Ammonia (Dissolved)` + `Chloride (Dissolved)` + `Kjeldahl Nitrogen (Total)` + `Nitrite + Nitrate (Dissolved)` + `Organic Nitrogen (Dissolved)` + `Ortho-phosphate (Dissolved)` + `Pheophytin a` + `Phosphorus (Total)` + `Silica (SiO2) (Dissolved)` + `Solids (Total Dissolved)` + `Solids (Total Suspended)`, data = wq.wy))
+
+```
+```{r}
+#Look for correlations among influential variables - taken from model with lowest AIC
+pairs(~`Organic Nitrogen (Dissolved)` + `Secchi Depth` + month + `Kjeldahl Nitrogen (Total)` + `Solids (Total Dissolved)` + `Conductance (EC)` + `Pheophytin a` + Oxygen + Temperature  , data = wq.wy)
+```
+```{r}
+wy.select <- dplyr::select(wq.wy, `Chlorophyll a`,`Organic Nitrogen (Dissolved)`,`Secchi Depth`,month , `Kjeldahl Nitrogen (Total)` , `Solids (Total Dissolved)` , `Conductance (EC)` , `Pheophytin a` , Oxygen , Temperature)
+cov(wy.select)
+```
+```{r}
+cor(wy.select)
+```
+```{r}
+#Null regression for comparison
+lm.null <- lm(`Chlorophyll a` ~ 1, data = wy.select); summary(lm.null)
+
+#Simple Regression Chlorophyll a vs. Temperature
+lm.chla.tmp <- lm(`Chlorophyll a` ~ Temperature, data = wy.select); summary(lm.chla.tmp)
+
+#Simple Regression Chlorophyll a vs. Oxygen
+lm.chla.o <- lm(`Chlorophyll a` ~ Oxygen, data = wy.select); summary(lm.chla.o)
+
+#Simple Regression Chlorophyll a vs. Pheophytin a 
+lm.chla.pa <- lm(`Chlorophyll a` ~ `Pheophytin a` , data = wy.select); summary(lm.chla.pa)
+
+#Simple Regression Chlorophyll a vs. Conductance (EC) 
+lm.chla.ec <- lm(`Chlorophyll a` ~ `Conductance (EC)` , data = wy.select); summary(lm.chla.ec)
+
+#Simple Regression Chlorophyll a vs. Solids (Total Dissolved) 
+lm.chla.tds <- lm(`Chlorophyll a` ~ `Solids (Total Dissolved)`  , data = wy.select); summary(lm.chla.tds)
+
+#Simple Regression Chlorophyll a vs. Kjeldahl Nitrogen (Total)
+lm.chla.kn <- lm(`Chlorophyll a` ~ `Kjeldahl Nitrogen (Total)`  , data = wy.select); summary(lm.chla.kn)
+
+#Simple Regression Chlorophyll a vs. month 
+lm.chla.m <- lm(`Chlorophyll a` ~ month   , data = wy.select); summary(lm.chla.m)
+
+#Simple Regression Chlorophyll a vs. Secchi Depth
+lm.chla.sd <- lm(`Chlorophyll a` ~ `Secchi Depth`  , data = wy.select); summary(lm.chla.sd)
+
+#Simple Regression Chlorophyll a vs. Organic Nitrogen (Dissolved)
+lm.chla.on <- lm(`Chlorophyll a` ~ `Organic Nitrogen (Dissolved)`  , data = wy.select); summary(lm.chla.on)
+
+#Simple Regression Chlorophyll a vs. year
+lm.chla.yr <- lm(`Chlorophyll a` ~ year  , data = wy.select); summary(lm.chla.yr)
+```
+
+```{r}
+lms <- list(null=lm.null, chla.tmp = lm.chla.tmp, chla.o = lm.chla.o, chla.pa = lm.chla.pa, chla.ec = lm.chla.ec, chla.tds = lm.chla.tds, chla.kn = lm.chla.kn, chla.m = lm.chla.m, chla.sd = lm.chla.sd, chla.on = lm.chla.on, chla.yr = lm.chla.yr )
+lms.stats <- mapply(glance, lms)
+colnames(lms.stats) <- names(lms)
+lms.stats
+```
+
+```{r}
+#Based off r-squared values, choosing Temperature and Pheophytin a as good predictor variables for Chlorophyll A
+
+lm.chla.tmp.pa <- lm(`Chlorophyll a` ~ Temperature + `Pheophytin a`, data = wy.select); summary(lm.chla.tmp.pa)
+```
+
+Choosing temperature as the most important predictor variable as Pheophytin a is basically a direct measure of Chlorophyll a
+
+##2. Parallel Regression- Parallel regression specifies an additive model, where there is one regression line (for the continuous predictor) which is displaced vertically according to the mean value of the discrete predictor. It hypothesizes that the only effect of the discrete predictor is to adjust the mean, but that the relation between the continuous predictor and the response variable is then the same for all classes of the discrete predictor.
+
+Using your mean monthly water quality dataset for CA WY 2005-2012, create a new discrete value called "season", and assign a label to your data for "wet season" and "dry season" (you will have decide what constitutes wet and dry). Model the mean monthly Chl-a concentration as a function of season and the water quality variable you idenitifed as MOST important in explaining the variance of Chl-a from question 1. 
+
+•	Model them first separately, then as an additive model, e.g.:
+o	lm(Chl-a ~ season)
+o	lm(Chl-a ~ my_most_important_variable)
+o	lm(Chl-a ~ season + my_most_important_variable)
+•	How much of the variation in Chl-a is explained by season? By your most important variable? By both together? Is the combined model better than individual models? 
+•	In the parallel regression model (season and your most important variable as predictors), what are the differences in the means between seasons? What is the slope of the linear regression after accounting for season? How does this compare with the slope of the linear regression not considering season?
+•	Are the residuals normally distributed? 
+•	Plot Chl-a vs your most important variable, with the observations colored by season. Add the parallel regression lines from the combined model in the appropriate colors, and add the univariate regression line.
+
+```{r}
+#Add season for column and differentiate between wet/dry
+# Wet Season = Oct-Mar
+#Dry Season = Apr-Sep
+wy.select$season <- ifelse(wy.select$month >=10|wy.select$month<=3, "wet", "dry")
+```
+
+```{r}
+#	Model them first separately, then as an additive model 
+
+#lm(Chl-a ~ season)
+lm.chla.season <- lm(`Chlorophyll a` ~ season, data = wy.select); summary(lm.chla.season)
+
+#lm(Chl-a ~ my_most_important_variable)
+lm.chla.tmp <- lm(`Chlorophyll a` ~ Temperature, data = wy.select); summary(lm.chla.tmp)
+
+#lm(Chl-a ~ season + my_most_important_variable)
+lm.chla.season.tmp <- lm(`Chlorophyll a` ~ season + Temperature, data = wy.select); summary(lm.chla.season.tmp)
+```
+```{r}
+#How much of the variation in Chl-a is explained by season? By your most important variable? By both together? Is the combined model better than individual models? 
+var.chla.season <- var(wy.select$`Chlorophyll a`, wy.select$season)
+var.chla.season
+var.chla.tmp <- var(wy.select$`Chlorophyll a`, wy.select$Temperature)
+var.chla.tmp
+
+```
+

@@ -50,7 +50,9 @@ wq.wy <- subset(wq.summary, wq.summary$WY >= 2005 & wq.summary$WY <= 2012)
 #Stepwise Multiple Regression - pick best predictor variables from full model, choosing variables that are not all NA/make sense (avg lat/long not helpful)
 
 lms <- step(lm(`Chlorophyll a` ~ month + Depth + `Conductance (EC)`+ SiteDepth+ Fluorescence + Oxygen + `Secchi Depth` + Temperature + Turbidity + `Ammonia (Dissolved)` + `Chloride (Dissolved)` + `Kjeldahl Nitrogen (Total)` + `Nitrite + Nitrate (Dissolved)` + `Organic Nitrogen (Dissolved)` + `Ortho-phosphate (Dissolved)` + `Pheophytin a` + `Phosphorus (Total)` + `Silica (SiO2) (Dissolved)` + `Solids (Total Dissolved)` + `Solids (Total Suspended)`, data = wq.wy))
-
+#Qingqing's comments: I would suggest to subset your dataset first and use the format "~." instead of listing all the variables. For example:
+Water <- wq.wy[colSums(!is.na(WQ)) > 0] #and also remove some variables you don't need use "subset"
+qingqinglm <- step(lm(Chlorophyll.a ~ ., data = Water))
 ```
 ```{r}
 #Look for correlations among influential variables - taken from model with lowest AIC
